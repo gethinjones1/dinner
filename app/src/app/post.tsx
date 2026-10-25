@@ -4,12 +4,21 @@ import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Button } from '../components/Button';
 import { request } from '../lib/api';
 import { useSession } from '../lib/session';
-import { colors, fonts, shadow, type } from '../lib/theme';
+import { colors, noFocusRing, type } from '../lib/theme';
 
 const MAX_CAPTION = 280;
 const pickerOptions: ImagePicker.ImagePickerOptions = {
@@ -19,10 +28,6 @@ const pickerOptions: ImagePicker.ImagePickerOptions = {
   quality: 0.7,
 };
 const canUseCamera = Platform.OS !== 'web';
-
-function Corner({ style }: { style: object }) {
-  return <View style={[styles.corner, style]} />;
-}
 
 export default function PostScreen() {
   const router = useRouter();
@@ -74,133 +79,99 @@ export default function PostScreen() {
 
   return (
     <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <View style={[styles.header, { paddingTop: Platform.OS === 'ios' ? 18 : insets.top + 12 }]}>
-        <Pressable onPress={() => router.back()} hitSlop={10} accessibilityLabel="Close" style={styles.close}>
-          <Ionicons name="close" size={22} color={colors.ink} />
+      <View style={[styles.header, { paddingTop: Platform.OS === 'ios' ? 14 : insets.top + 10 }]}>
+        <Pressable onPress={() => router.back()} hitSlop={10} style={styles.headerSide}>
+          <Text style={type.body}>Cancel</Text>
         </Pressable>
-        <Text style={[type.title, { fontSize: 22 }]}>
-          Tonight’s <Text style={{ fontFamily: fonts.displayItalic, color: colors.accent }}>plate</Text>
-        </Text>
-        <View style={{ width: 40 }} />
+        <Text style={type.title}>New post</Text>
+        <Pressable onPress={share} disabled={!asset || busy} hitSlop={10} style={[styles.headerSide, { alignItems: 'flex-end' }]}>
+          {busy ? (
+            <ActivityIndicator color={colors.text} />
+          ) : (
+            <Text style={[type.bold, { color: asset ? colors.text : colors.placeholder }]}>Share</Text>
+          )}
+        </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}>
         {asset ? (
-          <View style={[styles.frame, shadow]}>
-            <Image source={{ uri: asset.uri }} style={StyleSheet.absoluteFill} contentFit="cover" />
-            <Pressable style={styles.retake} onPress={() => choose('library')} disabled={busy}>
-              <Ionicons name="images-outline" size={16} color={colors.ink} />
-              <Text style={styles.retakeText}>Choose another</Text>
-            </Pressable>
-          </View>
+          <Pressable onPress={() => choose('library')} disabled={busy}>
+            <Image source={{ uri: asset.uri }} style={styles.photo} contentFit="cover" />
+          </Pressable>
         ) : (
-          <View style={[styles.frame, styles.frameEmpty]}>
-            <Corner style={{ top: 18, left: 18, borderTopWidth: 3, borderLeftWidth: 3 }} />
-            <Corner style={{ top: 18, right: 18, borderTopWidth: 3, borderRightWidth: 3 }} />
-            <Corner style={{ bottom: 18, left: 18, borderBottomWidth: 3, borderLeftWidth: 3 }} />
-            <Corner style={{ bottom: 18, right: 18, borderBottomWidth: 3, borderRightWidth: 3 }} />
-            <Text style={{ fontSize: 54 }}>🍲</Text>
-            <Text style={[type.caption, { color: colors.inkSoft, textAlign: 'center' }]}>
-              Plate it up, then{'\n'}snap it from above.
-            </Text>
-            <View style={styles.sourceRow}>
-              {canUseCamera && (
-                <Pressable style={styles.shutter} onPress={() => choose('camera')} accessibilityLabel="Take photo">
-                  <Ionicons name="camera" size={28} color={colors.onAccent} />
-                </Pressable>
-              )}
-              <Pressable
-                style={[styles.libraryButton, !canUseCamera && styles.libraryButtonWide]}
-                onPress={() => choose('library')}
-                accessibilityLabel="Choose from library"
-              >
-                <Ionicons name="images-outline" size={22} color={colors.ink} />
-                {!canUseCamera && <Text style={styles.retakeText}>Choose a photo</Text>}
-              </Pressable>
-            </View>
+          <View style={[styles.photo, styles.empty]}>
+            <Ionicons name="camera-outline" size={40} color={colors.placeholder} />
+            <Text style={type.small}>Add a photo of today’s dinner</Text>
           </View>
         )}
 
-        <View style={styles.captionBox}>
-          <TextInput
-            style={styles.captionInput}
-            placeholder="What’s cooking? (optional)"
-            placeholderTextColor={colors.faint}
-            value={caption}
-            onChangeText={setCaption}
-            maxLength={MAX_CAPTION}
-            multiline
-          />
-          <Text style={styles.counter}>
-            {caption.length}/{MAX_CAPTION}
-          </Text>
+        <View style={styles.rows}>
+          {canUseCamera && (
+            <Pressable style={styles.row} onPress={() => choose('camera')} disabled={busy}>
+              <Ionicons name="camera-outline" size={22} color={colors.text} />
+              <Text style={[type.body, { flex: 1 }]}>Take photo</Text>
+              <Ionicons name="chevron-forward" size={18} color={colors.placeholder} />
+            </Pressable>
+          )}
+          <Pressable style={styles.row} onPress={() => choose('library')} disabled={busy}>
+            <Ionicons name="images-outline" size={22} color={colors.text} />
+            <Text style={[type.body, { flex: 1 }]}>{asset ? 'Choose a different photo' : 'Choose from library'}</Text>
+            <Ionicons name="chevron-forward" size={18} color={colors.placeholder} />
+          </Pressable>
         </View>
 
-        {error && <Text style={styles.error}>{error}</Text>}
-      </ScrollView>
+        <TextInput
+          style={styles.caption}
+          placeholder="Write a caption…"
+          placeholderTextColor={colors.placeholder}
+          value={caption}
+          onChangeText={setCaption}
+          maxLength={MAX_CAPTION}
+          multiline
+        />
 
-      <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
-        <Button title="Share to the table" icon="arrow-up" onPress={share} busy={busy} disabled={!asset} />
-        <Text style={[type.muted, { textAlign: 'center', fontSize: 13 }]}>One dinner a night. You can’t post again until tomorrow.</Text>
-      </View>
+        {error && <Text style={styles.error}>{error}</Text>}
+        <Text style={[type.small, styles.note]}>You can post one photo a day.</Text>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 8 },
-  close: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.line, alignItems: 'center', justifyContent: 'center' },
-  content: { padding: 20, gap: 16 },
-  frame: { width: '100%', aspectRatio: 1, borderRadius: 28, overflow: 'hidden', backgroundColor: colors.line },
-  frameEmpty: { alignItems: 'center', justifyContent: 'center', gap: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.line },
-  corner: { position: 'absolute', width: 28, height: 28, borderColor: colors.accent, borderRadius: 4 },
-  sourceRow: { flexDirection: 'row', alignItems: 'center', gap: 18, marginTop: 10 },
-  shutter: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: colors.accent,
+  header: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 5,
-    borderColor: colors.accentSoft,
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.line,
   },
-  libraryButton: {
+  headerSide: { width: 70 },
+  photo: { width: '100%', aspectRatio: 1, backgroundColor: colors.fill },
+  empty: { alignItems: 'center', justifyContent: 'center', gap: 10 },
+  rows: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
     height: 52,
-    minWidth: 52,
-    borderRadius: 26,
-    backgroundColor: colors.line,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.line,
   },
-  libraryButtonWide: { paddingHorizontal: 22 },
-  retake: {
-    position: 'absolute',
-    right: 14,
-    bottom: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 9,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-    backgroundColor: 'rgba(251,244,234,0.92)',
-  },
-  retakeText: { fontFamily: fonts.semibold, fontSize: 14, color: colors.ink },
-  captionBox: { backgroundColor: colors.surface, borderRadius: 20, borderWidth: 1, borderColor: colors.line, padding: 16 },
-  captionInput: {
-    fontFamily: fonts.serifItalic,
-    fontSize: 19,
-    lineHeight: 26,
-    color: colors.ink,
-    minHeight: 60,
+  caption: {
+    ...noFocusRing,
+    fontSize: 15,
+    lineHeight: 20,
+    color: colors.text,
+    minHeight: 96,
+    padding: 16,
     textAlignVertical: 'top',
-    padding: 0,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.line,
   },
-  counter: { fontFamily: fonts.medium, fontSize: 12, color: colors.faint, textAlign: 'right', marginTop: 6 },
-  error: { fontFamily: fonts.medium, color: colors.danger, textAlign: 'center' },
-  footer: { paddingHorizontal: 20, paddingTop: 12, gap: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
+  error: { color: colors.danger, fontSize: 13, textAlign: 'center', padding: 16 },
+  note: { textAlign: 'center', padding: 16 },
 });
