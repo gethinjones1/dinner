@@ -11,7 +11,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#1D1611",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -30,6 +30,15 @@
         {
           "photosPermission": "Dinner needs access to your photos so you can share a picture of your dinner.",
           "cameraPermission": "Dinner needs the camera so you can snap a picture of your dinner."
+        }
+      ],
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#1D1611",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 160
         }
       ]
     ],

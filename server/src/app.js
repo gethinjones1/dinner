@@ -4,7 +4,7 @@ import path from 'node:path';
 import express from 'express';
 import multer from 'multer';
 import { hashPassword, newToken, verifyPassword } from './auth.js';
-import { dayInTimezone, isValidTimezone } from './day.js';
+import { dayInTimezone, isValidTimezone, streakLength } from './day.js';
 
 const IMAGE_TYPES = {
   'image/jpeg': '.jpg',
@@ -70,6 +70,8 @@ export function createApp({ db, uploadDir, now = () => new Date() }) {
       SELECT posts.*, users.username FROM posts JOIN users ON users.id = posts.user_id
       WHERE posts.id < ? ORDER BY posts.id DESC LIMIT ?`),
     deletePost: db.prepare('DELETE FROM posts WHERE id = ?'),
+    recentDays: db.prepare('SELECT day FROM posts WHERE user_id = ? ORDER BY day DESC LIMIT 1000'),
+    countForDay: db.prepare('SELECT COUNT(*) AS n FROM posts WHERE day = ?'),
   };
 
   const publicUser = (u) => ({ id: u.id, username: u.username, timezone: u.timezone });
@@ -134,7 +136,14 @@ export function createApp({ db, uploadDir, now = () => new Date() }) {
   app.get('/me', requireUser, (req, res) => {
     const today = dayInTimezone(req.user.timezone, now());
     const post = stmts.postForDay.get(req.user.id, today);
-    res.json({ user: publicUser(req.user), today, todaysPost: post ? publicPost(post) : null });
+    const days = stmts.recentDays.all(req.user.id).map((r) => r.day);
+    res.json({
+      user: publicUser(req.user),
+      today,
+      todaysPost: post ? publicPost(post) : null,
+      streak: streakLength(days, today),
+      sharedToday: stmts.countForDay.get(today).n,
+    });
   });
 
   app.get('/posts', requireUser, (req, res) => {

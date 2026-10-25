@@ -1,37 +1,46 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
-import Stack from 'expo-router/stack';
-import { useCallback, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Platform, Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, Platform, Pressable, RefreshControl, SectionList, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Avatar } from '../components/Avatar';
+import { Button } from '../components/Button';
+import { StreakChip } from '../components/StreakChip';
 import { ApiError, imageUri, request, type Post } from '../lib/api';
 import { useSession } from '../lib/session';
-import { colors } from '../lib/theme';
+import { colors, fonts, shadow, type } from '../lib/theme';
 
-type Me = { today: string; todaysPost: Post | null };
+type Me = { today: string; todaysPost: Post | null; streak: number; sharedToday: number };
 type Feed = { posts: Post[]; nextCursor: number | null };
 
-function timeAgo(iso: string) {
-  const minutes = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+// Parse YYYY-MM-DD as a local calendar date (not UTC midnight).
+const parseDay = (day: string) => new Date(`${day}T12:00:00`);
+
+function dayLabel(day: string, today: string) {
+  const diff = Math.round((parseDay(today).getTime() - parseDay(day).getTime()) / 86_400_000);
+  if (diff === 0) return 'Tonight';
+  if (diff === 1) return 'Last night';
+  return parseDay(day).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' });
 }
 
-function confirm(title: string, message: string, onConfirm: () => void) {
+const timeOf = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+
+function confirm(title: string, message: string, action: string, onConfirm: () => void) {
   if (Platform.OS === 'web') {
     if (globalThis.confirm(`${title}\n\n${message}`)) onConfirm();
     return;
   }
   Alert.alert(title, message, [
     { text: 'Cancel', style: 'cancel' },
-    { text: 'Delete', style: 'destructive', onPress: onConfirm },
+    { text: action, style: 'destructive', onPress: onConfirm },
   ]);
 }
 
 export default function FeedScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { session, signOut } = useSession();
   const token = session!.token;
   const [me, setMe] = useState<Me | null>(null);
@@ -81,7 +90,7 @@ export default function FeedScreen() {
   }
 
   function deletePost(post: Post) {
-    confirm('Delete this photo?', 'If it was today’s dinner you can share another one.', async () => {
+    confirm('Delete this photo?', 'If it was tonight’s dinner you can share another one.', 'Delete', async () => {
       try {
         await request(`/posts/${post.id}`, { method: 'DELETE', token });
         load();
@@ -91,92 +100,171 @@ export default function FeedScreen() {
     });
   }
 
+  // Your own plate tonight is shown in the hero card, so leave it out of the list.
+  const sections = useMemo(() => {
+    if (!me) return [];
+    const groups = new Map<string, Post[]>();
+    for (const p of posts) {
+      if (p.id === me.todaysPost?.id) continue;
+      groups.set(p.day, [...(groups.get(p.day) ?? []), p]);
+    }
+    return [...groups].map(([day, data]) => ({ day, title: dayLabel(day, me.today), data }));
+  }, [posts, me]);
+
   const header = (
-    <View style={styles.todayCard}>
+    <View style={{ paddingTop: insets.top + 12 }}>
+      <View style={styles.topBar}>
+        <View style={{ flex: 1 }}>
+          <Text style={type.eyebrow}>
+            {new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
+          </Text>
+          <Text style={[type.hero, { marginTop: 4 }]}>
+            Tonight’s <Text style={{ fontFamily: fonts.displayItalic, color: colors.accent }}>table</Text>
+          </Text>
+        </View>
+        <Pressable
+          accessibilityLabel="Account"
+          hitSlop={8}
+          onPress={() => confirm(`Signed in as ${session!.user.username}`, 'Do you want to sign out?', 'Sign out', signOut)}
+        >
+          <Avatar name={session!.user.username} size={42} />
+        </Pressable>
+      </View>
+
       {me === null ? (
-        <ActivityIndicator color={colors.primary} />
+        <View style={[styles.hero, styles.heroEmpty, { alignItems: 'center', justifyContent: 'center', minHeight: 220 }]}>
+          <ActivityIndicator color={colors.cream} />
+        </View>
       ) : me.todaysPost ? (
-        <>
-          <Text style={styles.todayTitle}>You’ve shared today’s dinner ✅</Text>
-          <Text style={styles.todayText}>Come back tomorrow for your next one.</Text>
-        </>
+        <View style={[styles.hero, shadow]}>
+          <Image source={{ uri: imageUri(me.todaysPost) }} style={StyleSheet.absoluteFill} contentFit="cover" transition={250} />
+          <LinearGradient colors={['rgba(20,12,8,0)', 'rgba(20,12,8,0.88)']} locations={[0.4, 1]} style={StyleSheet.absoluteFill} />
+          <View style={styles.heroBody}>
+            <Text style={[type.eyebrow, { color: 'rgba(251,244,234,0.8)' }]}>
+              Your plate · {timeOf(me.todaysPost.createdAt)}
+            </Text>
+            {!!me.todaysPost.caption && (
+              <Text style={[type.caption, { color: colors.cream, fontSize: 20, lineHeight: 26 }]} numberOfLines={3}>
+                “{me.todaysPost.caption}”
+              </Text>
+            )}
+            <View style={styles.heroFooter}>
+              <StreakChip streak={me.streak} postedToday dark />
+              <Pressable onPress={() => deletePost(me.todaysPost!)} hitSlop={10} accessibilityLabel="Delete tonight’s photo">
+                <Ionicons name="trash-outline" size={20} color="rgba(251,244,234,0.8)" />
+              </Pressable>
+            </View>
+          </View>
+        </View>
       ) : (
-        <>
-          <Text style={styles.todayTitle}>What’s for dinner tonight?</Text>
-          <Text style={styles.todayText}>You get one photo a day — make it count.</Text>
-          <Pressable style={styles.button} onPress={() => router.push('/post')}>
-            <Text style={styles.buttonText}>📸 Share today’s dinner</Text>
-          </Pressable>
-        </>
+        <View style={[styles.hero, styles.heroEmpty, shadow]}>
+          <LinearGradient
+            colors={['#6B2A12', '#2B1A12']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+          <Text style={styles.heroEmoji}>🍽️</Text>
+          <View style={styles.heroBody}>
+            <StreakChip streak={me.streak} postedToday={false} dark />
+            <Text style={[type.title, { color: colors.cream, fontSize: 30, lineHeight: 34 }]}>
+              What’s on your{'\n'}
+              <Text style={{ fontFamily: fonts.displayItalic }}>plate</Text> tonight?
+            </Text>
+            <Text style={[type.muted, { color: 'rgba(251,244,234,0.7)' }]}>
+              {me.sharedToday > 0
+                ? `${me.sharedToday} ${me.sharedToday === 1 ? 'person has' : 'people have'} shared tonight. One photo — make it count.`
+                : 'One photo a night — make it count.'}
+            </Text>
+            <Button
+              title="Share tonight’s dinner"
+              icon="camera"
+              variant="cream"
+              onPress={() => router.push('/post')}
+              style={{ marginTop: 8 }}
+            />
+          </View>
+        </View>
       )}
       {error && <Text style={styles.error}>{error}</Text>}
     </View>
   );
 
   return (
-    <>
-      <Stack.Screen
-        options={{
-          headerRight: () => (
-            <Pressable onPress={signOut} hitSlop={8}>
-              <Text style={styles.headerLink}>Sign out</Text>
-            </Pressable>
-          ),
-        }}
-      />
-      <FlatList
-        data={posts}
-        keyExtractor={(p) => String(p.id)}
-        ListHeaderComponent={header}
-        ListEmptyComponent={
-          me ? <Text style={styles.empty}>No dinners yet. Be the first to share one!</Text> : undefined
-        }
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={load} tintColor={colors.primary} />}
-        onEndReached={loadMore}
-        onEndReachedThreshold={0.5}
-        contentContainerStyle={styles.list}
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <Text style={styles.username}>{item.username}</Text>
-              <Text style={styles.meta}>{timeAgo(item.createdAt)}</Text>
+    <SectionList
+      sections={sections}
+      keyExtractor={(p) => String(p.id)}
+      ListHeaderComponent={header}
+      stickySectionHeadersEnabled={false}
+      ListEmptyComponent={
+        me ? (
+          <View style={styles.empty}>
+            <Text style={{ fontSize: 40 }}>🕯️</Text>
+            <Text style={[type.title, { fontSize: 22, textAlign: 'center' }]}>The table’s still being set</Text>
+            <Text style={[type.muted, { textAlign: 'center' }]}>Dinners from everyone will show up here.</Text>
+          </View>
+        ) : undefined
+      }
+      renderSectionHeader={({ section }) => (
+        <View style={styles.sectionHeader}>
+          <Text style={type.title}>{section.title}</Text>
+          <Text style={type.muted}>
+            {section.data.length} {section.data.length === 1 ? 'plate' : 'plates'}
+          </Text>
+        </View>
+      )}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={load} tintColor={colors.accent} />}
+      onEndReached={loadMore}
+      onEndReachedThreshold={0.5}
+      contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 32 }]}
+      style={{ backgroundColor: colors.background }}
+      renderItem={({ item }) => (
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Avatar name={item.username} size={34} />
+            <View style={{ flex: 1 }}>
+              <Text style={type.label}>{item.username}</Text>
+              <Text style={[type.muted, { fontSize: 13, lineHeight: 17 }]}>{timeOf(item.createdAt)}</Text>
             </View>
-            <Image source={{ uri: imageUri(item) }} style={styles.photo} contentFit="cover" transition={200} />
-            {!!item.caption && <Text style={styles.caption}>{item.caption}</Text>}
             {item.userId === session!.user.id && (
-              <Pressable onPress={() => deletePost(item)} hitSlop={8}>
-                <Text style={styles.delete}>Delete</Text>
+              <Pressable onPress={() => deletePost(item)} hitSlop={10} accessibilityLabel="Delete photo">
+                <Ionicons name="ellipsis-horizontal" size={20} color={colors.inkSoft} />
               </Pressable>
             )}
           </View>
-        )}
-      />
-    </>
+          <View style={[styles.photoWrap, shadow]}>
+            <Image source={{ uri: imageUri(item) }} style={styles.photo} contentFit="cover" transition={250} />
+          </View>
+          {!!item.caption && <Text style={[type.caption, styles.caption]}>{item.caption}</Text>}
+        </View>
+      )}
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  list: { padding: 16, gap: 16 },
-  headerLink: { color: colors.primary, fontWeight: '600', fontSize: 16 },
-  todayCard: {
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    padding: 20,
-    gap: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
+  list: { paddingHorizontal: 20 },
+  topBar: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, marginBottom: 20 },
+  hero: { borderRadius: 28, overflow: 'hidden', minHeight: 340, justifyContent: 'flex-end', backgroundColor: colors.ink },
+  heroEmpty: { minHeight: 0 },
+  heroEmoji: { position: 'absolute', right: -18, top: -14, fontSize: 120, opacity: 0.22, transform: [{ rotate: '-14deg' }] },
+  heroBody: { padding: 22, gap: 10 },
+  heroFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 },
+  error: { fontFamily: fonts.medium, color: colors.danger, marginTop: 12, textAlign: 'center' },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    marginTop: 36,
+    marginBottom: 14,
+    paddingBottom: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.faint,
   },
-  todayTitle: { fontSize: 20, fontWeight: '700', color: colors.text },
-  todayText: { fontSize: 15, color: colors.muted },
-  button: { backgroundColor: colors.primary, borderRadius: 12, padding: 14, alignItems: 'center', marginTop: 8 },
-  buttonText: { color: colors.primaryText, fontSize: 16, fontWeight: '700' },
-  error: { color: colors.danger },
-  empty: { textAlign: 'center', color: colors.muted, marginTop: 32 },
-  card: { backgroundColor: colors.card, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: colors.border },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 12 },
-  username: { fontWeight: '700', fontSize: 15, color: colors.text },
-  meta: { color: colors.muted, fontSize: 13 },
-  photo: { width: '100%', aspectRatio: 1, backgroundColor: colors.border },
-  caption: { padding: 12, fontSize: 15, color: colors.text },
-  delete: { color: colors.danger, paddingHorizontal: 12, paddingBottom: 12, fontWeight: '600' },
+  card: { marginBottom: 28 },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
+  photoWrap: { borderRadius: 22, backgroundColor: colors.line },
+  photo: { width: '100%', aspectRatio: 1, borderRadius: 22 },
+  caption: { marginTop: 12, paddingHorizontal: 4 },
+  empty: { alignItems: 'center', gap: 8, paddingVertical: 48, paddingHorizontal: 24 },
 });

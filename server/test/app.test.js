@@ -5,7 +5,7 @@ import path from 'node:path';
 import { after, before, beforeEach, describe, it } from 'node:test';
 import { createApp } from '../src/app.js';
 import { openDb } from '../src/db.js';
-import { dayInTimezone } from '../src/day.js';
+import { dayInTimezone, streakLength } from '../src/day.js';
 
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 0x4a, 0x46, 0x49, 0x46, 0xff, 0xd9]);
 
@@ -59,6 +59,16 @@ describe('dayInTimezone', () => {
   });
 });
 
+describe('streakLength', () => {
+  it('counts consecutive days ending today or yesterday', () => {
+    assert.equal(streakLength([], '2026-10-25'), 0);
+    assert.equal(streakLength(['2026-10-25', '2026-10-24', '2026-10-22'], '2026-10-25'), 2);
+    assert.equal(streakLength(['2026-10-24', '2026-10-23'], '2026-10-25'), 2);
+    assert.equal(streakLength(['2026-10-23'], '2026-10-25'), 0);
+    assert.equal(streakLength(['2026-11-01', '2026-10-31'], '2026-11-01'), 2);
+  });
+});
+
 describe('auth', () => {
   it('rejects bad credentials and unauthenticated requests', async () => {
     await register();
@@ -107,7 +117,9 @@ describe('posting', () => {
     assert.equal((await post(token)).status, 201);
     clock = new Date('2026-10-26T18:00:00Z');
     assert.equal((await get(token, '/me')).todaysPost, null);
+    assert.equal((await get(token, '/me')).streak, 1);
     assert.equal((await post(token)).status, 201);
+    assert.equal((await get(token, '/me')).streak, 2);
   });
 
   it("follows the user's timezone, not the server's", async () => {

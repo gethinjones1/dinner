@@ -17,3 +17,23 @@ export function dayInTimezone(timezone, date = new Date()) {
     day: '2-digit',
   }).format(date);
 }
+
+function previousDay(day) {
+  const d = new Date(`${day}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+// Consecutive days posted, ending today (or yesterday, so a streak isn't
+// shown as broken before you've had a chance to post tonight).
+// `days` must be sorted newest first.
+export function streakLength(days, today) {
+  const posted = new Set(days);
+  let day = posted.has(today) ? today : previousDay(today);
+  let streak = 0;
+  while (posted.has(day)) {
+    streak++;
+    day = previousDay(day);
+  }
+  return streak;
+}

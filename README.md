@@ -5,6 +5,13 @@ A mobile app for sharing a photo of your dinner. Each person gets **one photo pe
 - `app/`: the mobile app (Expo / React Native, runs on iOS, Android and web)
 - `server/`: the API (Node.js + Express + SQLite). It stores users and photos and enforces the daily limit
 
+<p>
+  <img src="docs/screenshots/sign-in.png" width="200" alt="Sign in">
+  <img src="docs/screenshots/feed.png" width="200" alt="Feed before posting">
+  <img src="docs/screenshots/share.png" width="200" alt="Sharing a photo">
+  <img src="docs/screenshots/posted.png" width="200" alt="Feed after posting">
+</p>
+
 ## How the one-a-day rule works
 
 Each post is stamped with the calendar day *in the poster's own timezone*, which the app
@@ -43,7 +50,7 @@ All endpoints except auth require `Authorization: Bearer <token>`.
 | POST   | `/auth/register` | `{ username, password, timezone }` → `{ token, user }`     |
 | POST   | `/auth/login`    | `{ username, password }` → `{ token, user }`               |
 | POST   | `/auth/logout`   | Ends the session                                           |
-| GET    | `/me`            | Current user, their date today, and today's post           |
+| GET    | `/me`            | Current user, their date today, today's post, streak       |
 | GET    | `/posts`         | Everyone's posts, newest first (`?before=<id>` to page)    |
 | POST   | `/posts`         | Multipart `photo` (JPEG/PNG/WebP/HEIC, ≤10 MB) + `caption` |
 | DELETE | `/posts/:id`     | Delete your own post                                       |
